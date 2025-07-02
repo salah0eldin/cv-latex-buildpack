@@ -98,7 +98,14 @@ if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
     "$TEXLIVE_BIN_DIR/tlmgr" option repository ctan >/dev/null 2>&1 || true
     
     # Essential packages for CV generation (based on user requirements)
+    # Core packages
     PACKAGES="geometry fontawesome5 tcolorbox enumitem xcolor hyperref pgf etoolbox amsfonts setspace mathpazo helvetic courier amssymb"
+    
+    # tcolorbox dependencies
+    PACKAGES="$PACKAGES pdfcol verbatim environ trimspaces"
+    
+    # Additional useful packages for CV
+    PACKAGES="$PACKAGES calc titlesec"
     
     for package in $PACKAGES; do
         echo "       Installing $package..."
