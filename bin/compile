@@ -8,7 +8,7 @@ BIN_DIR=$(cd $(dirname $0); pwd)
 
 # Use TinyTeX from GitHub releases (more reliable than install-tl)
 TINYTEX_VERSION="v2025.07"
-TINYTEX_URL="https://github.com/rstudio/tinytex-releases/releases/download/${TINYTEX_VERSION}/TinyTeX-1-${TINYTEX_VERSION#v}.tar.gz"
+TINYTEX_URL="https://github.com/rstudio/tinytex-releases/releases/download/${TINYTEX_VERSION}/TinyTeX-1-${TINYTEX_VERSION}.tar.gz"
 TEXLIVE_HOME="$BUILD_DIR/.texlive"
 TEXLIVE_CACHE="$CACHE_DIR/.texlive"
 PROFILE_D="$BUILD_DIR/.profile.d/texlive.sh"
