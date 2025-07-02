@@ -44,12 +44,18 @@ You can also force detection by creating a `.latex-buildpack` file in your proje
 - `bin/release` - Sets up environment variables and PATH
 
 ## What's Fixed
-This version addresses common package installation issues by:
-- Using the official TeX Live installer instead of TinyTeX
-- Proper repository configuration for package management
+This version addresses common TeX Live installation issues by:
+- Using pre-compiled TinyTeX instead of install-tl (avoids permission errors)
+- Proper caching mechanism to speed up subsequent builds
+- Robust binary detection and PATH setup
+- Essential CV packages with graceful fallback
 - Better error handling and verbose output
-- Fallback mechanisms for package installation
-- Comprehensive testing and verification
+
+## Common Issues Resolved
+- ❌ "Permission denied" errors during installation
+- ❌ "TeX Live versions not compatible" repository conflicts  
+- ❌ "mkdir failed for tree" permission issues
+- ❌ Package installation warnings and failures
 
 ## File Structure
 - `bin/detect` - Detects if LaTeX is needed

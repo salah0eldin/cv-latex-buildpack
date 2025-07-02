@@ -1,175 +1,125 @@
-#!/bin/bash
-# Working LaTeX buildpack compile script based on successful patterns
+#!/usr/bin/env bash
+# Working LaTeX buildpack based on successful Heroku buildpacks
 
 BUILD_DIR=$1
 CACHE_DIR=$2
-ENV_DIR=$3
+BIN_DIR=$(cd $(dirname $0); pwd)
 
-echo "-----> Installing LaTeX for CV generation"
+# Use TinyTeX from GitHub releases (more reliable than install-tl)
+TINYTEX_VERSION="v2023.05"
+TINYTEX_URL="https://github.com/rstudio/tinytex-releases/releases/download/${TINYTEX_VERSION}/TinyTeX-1-${TINYTEX_VERSION#v}.tar.gz"
+TEXLIVE_HOME="$BUILD_DIR/.texlive"
+TEXLIVE_CACHE="$CACHE_DIR/.texlive"
+PROFILE_D="$BUILD_DIR/.profile.d/texlive.sh"
 
-# Set up directories
-TEXLIVE_DIR="$BUILD_DIR/.texlive"
-TEXLIVE_CACHE="$CACHE_DIR/texlive"
+echo "-----> Installing TinyTeX for CV generation"
 
 # Create directories
+mkdir -p "$TEXLIVE_HOME"
 mkdir -p "$TEXLIVE_CACHE"
-mkdir -p "$TEXLIVE_DIR"
-mkdir -p "$BUILD_DIR/.profile.d"
+mkdir -p "$(dirname $PROFILE_D)"
 
-# Use the install-tl method (more reliable than TinyTeX for package management)
-INSTALL_TL_URL="https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz"
-INSTALL_TL_ARCHIVE="$TEXLIVE_CACHE/install-tl-unx.tar.gz"
-
-echo "-----> Downloading TeX Live installer"
-if [ ! -f "$INSTALL_TL_ARCHIVE" ]; then
-    curl -L -o "$INSTALL_TL_ARCHIVE" "$INSTALL_TL_URL" || {
-        echo "ERROR: Failed to download TeX Live installer"
-        exit 1
-    }
-fi
-
-# Extract installer
-echo "-----> Extracting TeX Live installer"
-cd "$TEXLIVE_CACHE"
-if [ ! -d install-tl-* ]; then
-    tar -xzf install-tl-unx.tar.gz || {
-        echo "ERROR: Failed to extract TeX Live installer"
-        exit 1
-    }
-fi
-
-# Find installer directory
-INSTALL_TL_DIR=$(find . -maxdepth 1 -name "install-tl-*" -type d | head -n1)
-if [ -z "$INSTALL_TL_DIR" ]; then
-    echo "ERROR: Could not find install-tl directory"
-    exit 1
-fi
-
-echo "-----> Found installer directory: $INSTALL_TL_DIR"
-
-# Create installation profile
-cat > "$TEXLIVE_CACHE/texlive.profile" << EOF
-selected_scheme scheme-minimal
-TEXDIR $TEXLIVE_DIR
-TEXMFCONFIG $TEXLIVE_DIR/texmf-config
-TEXMFHOME $TEXLIVE_DIR/texmf
-TEXMFLOCAL $TEXLIVE_DIR/texmf-local
-TEXMFVAR $TEXLIVE_DIR/texmf-var
-binary_x86_64-linux 1
-collection-basic 1
-collection-latex 1
-instopt_adjustpath 0
-instopt_adjustrepo 1
-instopt_letter 0
-instopt_portable 1
-instopt_write18_restricted 1
-tlpdbopt_autobackup 0
-tlpdbopt_create_formats 1
-tlpdbopt_desktop_integration 0
-tlpdbopt_file_assocs 0
-tlpdbopt_generate_updmap 0
-tlpdbopt_install_docfiles 0
-tlpdbopt_install_srcfiles 0
-tlpdbopt_post_code 1
-EOF
-
-# Install TeX Live if not already installed
-if [ ! -f "$TEXLIVE_DIR/bin/x86_64-linux/pdflatex" ]; then
-    echo "-----> Installing TeX Live with minimal scheme"
-    cd "$INSTALL_TL_DIR"
-    perl ./install-tl -profile "$TEXLIVE_CACHE/texlive.profile" -repository https://mirror.ctan.org/systems/texlive/tlnet || {
-        echo "       Trying alternative repository..."
-        perl ./install-tl -profile "$TEXLIVE_CACHE/texlive.profile" -repository https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2023/tlnet-final || {
-            echo "ERROR: TeX Live installation failed"
-            exit 1
-        }
-    }
+# Check if we have a cached version
+if [ -f "$TEXLIVE_CACHE/VERSION" ] && [ "$(cat $TEXLIVE_CACHE/VERSION)" = "$TINYTEX_VERSION" ]; then
+    echo "-----> Installing TinyTeX $TINYTEX_VERSION from cache"
+    cp -R "$TEXLIVE_CACHE"/* "$TEXLIVE_HOME/"
 else
-    echo "-----> TeX Live already installed"
+    echo "-----> Downloading TinyTeX $TINYTEX_VERSION"
+    curl -L "$TINYTEX_URL" -s -o - | tar xzf - -C "$TEXLIVE_HOME" --strip-components=1 || {
+        echo "ERROR: Failed to download and extract TinyTeX"
+        exit 1
+    }
+
+    # Cache the installation
+    rm -rf "$TEXLIVE_CACHE"/*
+    cp -R "$TEXLIVE_HOME"/* "$TEXLIVE_CACHE/"
+    echo "$TINYTEX_VERSION" > "$TEXLIVE_CACHE/VERSION"
 fi
 
-# Set up PATH
-TEXLIVE_BIN_DIR="$TEXLIVE_DIR/bin/x86_64-linux"
-export PATH="$TEXLIVE_BIN_DIR:$PATH"
-
-# Verify installation
-if [ ! -f "$TEXLIVE_BIN_DIR/pdflatex" ]; then
-    echo "ERROR: pdflatex not found after installation"
-    ls -la "$TEXLIVE_DIR/bin/" || echo "bin directory not found"
-    exit 1
-fi
-
-echo "-----> Testing pdflatex installation"
-"$TEXLIVE_BIN_DIR/pdflatex" --version | head -1 || {
-    echo "ERROR: pdflatex test failed"
-    exit 1
-}
-
-# Install essential packages for CV
-echo "-----> Installing essential packages for CV generation"
-PACKAGES=(
-    "geometry"
-    "fontawesome5"
-    "tcolorbox"
-    "enumitem"
-    "xcolor"
-    "hyperref"
-    "pgf"
-    "etoolbox"
-    "amsfonts"
-    "setspace"
-)
-
-SUCCESSFUL_INSTALLS=0
-TOTAL_PACKAGES=${#PACKAGES[@]}
-
-for package in "${PACKAGES[@]}"; do
-    echo "       Installing $package..."
-    if "$TEXLIVE_BIN_DIR/tlmgr" install "$package" 2>/dev/null; then
-        echo "       ✓ Successfully installed $package"
-        ((SUCCESSFUL_INSTALLS++))
-    else
-        echo "       ✗ Failed to install $package"
+# Find TeX Live binaries
+TEXLIVE_BIN_DIR=""
+for bin_dir in "$TEXLIVE_HOME/.TinyTeX/bin/x86_64-linux" "$TEXLIVE_HOME/bin/x86_64-linux"; do
+    if [ -d "$bin_dir" ] && [ -x "$bin_dir/pdflatex" ]; then
+        TEXLIVE_BIN_DIR="$bin_dir"
+        break
     fi
 done
 
-echo "-----> Package installation summary: $SUCCESSFUL_INSTALLS/$TOTAL_PACKAGES packages installed"
+if [ -z "$TEXLIVE_BIN_DIR" ]; then
+    echo "ERROR: Could not find TeX Live binaries"
+    find "$TEXLIVE_HOME" -name "pdflatex" -type f 2>/dev/null || echo "pdflatex not found"
+    exit 1
+fi
 
-# Create environment setup script
-cat > "$BUILD_DIR/.profile.d/texlive.sh" << EOF
+echo "-----> Found TeX Live binaries at: $TEXLIVE_BIN_DIR"
+
+# Set up PATH
+export PATH="$TEXLIVE_BIN_DIR:$PATH"
+
+# Test pdflatex
+if ! "$TEXLIVE_BIN_DIR/pdflatex" --version >/dev/null 2>&1; then
+    echo "ERROR: pdflatex test failed"
+    exit 1
+fi
+
+echo "-----> pdflatex is working"
+
+# Install essential packages for CV if tlmgr is available
+if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
+    echo "-----> Installing essential CV packages"
+    
+    # Initialize tlmgr repository
+    "$TEXLIVE_BIN_DIR/tlmgr" option repository ctan >/dev/null 2>&1 || true
+    
+    # Essential packages for CV generation
+    PACKAGES="geometry fontawesome5 tcolorbox enumitem xcolor hyperref pgf etoolbox amsfonts setspace"
+    
+    for package in $PACKAGES; do
+        echo "       Installing $package..."
+        if "$TEXLIVE_BIN_DIR/tlmgr" install "$package" >/dev/null 2>&1; then
+            echo "       ✓ $package installed"
+        else
+            echo "       ✗ $package failed (will try on-demand)"
+        fi
+    done
+else
+    echo "-----> tlmgr not available, using base packages only"
+fi
+
+# Set up environment for runtime
+cat > "$PROFILE_D" << EOF
 export PATH="$TEXLIVE_BIN_DIR:\$PATH"
 export TEXMFCACHE="/tmp/texmf-cache"
 mkdir -p "\$TEXMFCACHE"
 EOF
 
 echo "-----> LaTeX installation complete"
-echo "       TeX Live location: $TEXLIVE_DIR"
 echo "       Binary location: $TEXLIVE_BIN_DIR"
-echo "       Installed packages: $SUCCESSFUL_INSTALLS/$TOTAL_PACKAGES"
 
 # Create test script
 cat > "$BUILD_DIR/test-latex.sh" << 'EOF'
 #!/bin/bash
-echo "=== LaTeX Installation Test ==="
+echo "=== LaTeX Test ==="
 echo "pdflatex: $(which pdflatex)"
-echo "pdflatex version: $(pdflatex --version 2>&1 | head -1)"
+echo "Version: $(pdflatex --version 2>&1 | head -1)"
 
-# Test compilation
+# Test basic compilation
 cat > /tmp/test.tex << 'TESTDOC'
 \documentclass{article}
 \usepackage{geometry}
 \begin{document}
-Hello World!
+Hello LaTeX!
 \end{document}
 TESTDOC
 
 echo "Testing compilation..."
 if pdflatex -interaction=nonstopmode -output-directory=/tmp /tmp/test.tex >/dev/null 2>&1; then
-    echo "✓ Test compilation successful!"
+    echo "✓ Compilation successful!"
+    ls -la /tmp/test.pdf 2>/dev/null && echo "PDF created: $(wc -c < /tmp/test.pdf) bytes"
 else
-    echo "✗ Test compilation failed"
+    echo "✗ Compilation failed"
 fi
 EOF
 chmod +x "$BUILD_DIR/test-latex.sh"
 
-echo "-----> Created test script at /app/test-latex.sh"
+echo "-----> Test script created at /app/test-latex.sh"
