@@ -123,7 +123,7 @@ fi
 
 # Set up environment for runtime
 cat > "$PROFILE_D" << EOF
-export PATH="$TEXLIVE_BIN_DIR:\$PATH"
+export PATH="/app/.texlive/bin/x86_64-linux:\$PATH"
 export TEXMFCACHE="/tmp/texmf-cache"
 mkdir -p "\$TEXMFCACHE"
 EOF
@@ -134,25 +134,36 @@ echo "       Binary location: $TEXLIVE_BIN_DIR"
 # Create test script
 cat > "$BUILD_DIR/test-latex.sh" << 'EOF'
 #!/bin/bash
-echo "=== LaTeX Test ==="
-echo "pdflatex: $(which pdflatex)"
-echo "Version: $(pdflatex --version 2>&1 | head -1)"
+echo "=== LaTeX Runtime Test ==="
+echo "PATH: $PATH"
+echo "pdflatex location: $(which pdflatex 2>/dev/null || echo 'NOT FOUND')"
+echo "Direct path test: $(ls -la /app/.texlive/bin/x86_64-linux/pdflatex 2>/dev/null || echo 'FILE NOT FOUND')"
 
-# Test basic compilation
-cat > /tmp/test.tex << 'TESTDOC'
+if command -v pdflatex >/dev/null 2>&1; then
+    echo "Version: $(pdflatex --version 2>&1 | head -1)"
+    
+    # Test basic compilation
+    cat > /tmp/test.tex << 'TESTDOC'
 \documentclass{article}
 \usepackage{geometry}
 \begin{document}
-Hello LaTeX!
+Hello LaTeX from Runtime!
 \end{document}
 TESTDOC
 
-echo "Testing compilation..."
-if pdflatex -interaction=nonstopmode -output-directory=/tmp /tmp/test.tex >/dev/null 2>&1; then
-    echo "✓ Compilation successful!"
-    ls -la /tmp/test.pdf 2>/dev/null && echo "PDF created: $(wc -c < /tmp/test.pdf) bytes"
+    echo "Testing compilation..."
+    if pdflatex -interaction=nonstopmode -output-directory=/tmp /tmp/test.tex >/dev/null 2>&1; then
+        echo "✓ Compilation successful!"
+        ls -la /tmp/test.pdf 2>/dev/null && echo "PDF created: $(wc -c < /tmp/test.pdf) bytes"
+    else
+        echo "✗ Compilation failed"
+        echo "pdflatex error output:"
+        pdflatex -interaction=nonstopmode -output-directory=/tmp /tmp/test.tex 2>&1 | tail -10
+    fi
 else
-    echo "✗ Compilation failed"
+    echo "✗ pdflatex not found in PATH"
+    echo "Available TeX binaries:"
+    ls -la /app/.texlive/bin/x86_64-linux/ 2>/dev/null | head -10 || echo "TeX directory not found"
 fi
 EOF
 chmod +x "$BUILD_DIR/test-latex.sh"
