@@ -1,0 +1,178 @@
+#!/bin/bash
+# Buildpack compile script for minimal LaTeX setup using TinyTeX
+
+BUILD_DIR=$1
+CACHE_DIR=$2
+ENV_DIR=$3
+
+echo "-----> Installing TinyTeX for CV generation"
+
+# Set up directories
+TEXLIVE_DIR="$BUILD_DIR/.texlive"
+TEXLIVE_CACHE="$CACHE_DIR/texlive"
+
+# Create directories
+mkdir -p "$TEXLIVE_CACHE"
+mkdir -p "$TEXLIVE_DIR"
+
+# Use TinyTeX which is designed to be portable and lightweight
+TINYTEX_URL="https://github.com/rstudio/tinytex-releases/releases/download/v2023.05/TinyTeX-1-v2023.05.tar.gz"
+TINYTEX_ARCHIVE="$TEXLIVE_CACHE/tinytex.tar.gz"
+
+echo "-----> Downloading TinyTeX (lightweight, portable TeX Live)"
+if [ ! -f "$TINYTEX_ARCHIVE" ]; then
+    curl -L -o "$TINYTEX_ARCHIVE" "$TINYTEX_URL" || {
+        echo "ERROR: Failed to download TinyTeX"
+        exit 1
+    }
+fi
+
+echo "-----> Extracting TinyTeX to $TEXLIVE_DIR"
+cd "$TEXLIVE_DIR"
+tar -xzf "$TINYTEX_ARCHIVE" --strip-components=1 || {
+    echo "ERROR: Failed to extract TinyTeX"
+    exit 1
+}
+
+# Find the correct bin directory
+TEXLIVE_BIN_DIR=""
+# Try different possible locations for TinyTeX binaries
+for possible_dir in \
+    "$TEXLIVE_DIR/.TinyTeX/bin/x86_64-linux" \
+    "$TEXLIVE_DIR/bin/x86_64-linux" \
+    "$TEXLIVE_DIR/bin/linux" \
+    "$TEXLIVE_DIR/.TinyTeX/bin"/* \
+    "$TEXLIVE_DIR/bin"/*; do
+    
+    if [ -d "$possible_dir" ] && [ -x "$possible_dir/pdflatex" ]; then
+        TEXLIVE_BIN_DIR="$possible_dir"
+        break
+    fi
+done
+
+if [ -z "$TEXLIVE_BIN_DIR" ]; then
+    echo "ERROR: Could not find TeX Live binaries with pdflatex"
+    echo "Available directories:"
+    find "$TEXLIVE_DIR" -type d -name "bin" 2>/dev/null || echo "No bin directories found"
+    echo "Looking for pdflatex:"
+    find "$TEXLIVE_DIR" -name "pdflatex" -type f 2>/dev/null || echo "No pdflatex found"
+    exit 1
+fi
+
+echo "-----> Found TeX Live binaries at: $TEXLIVE_BIN_DIR"
+
+# Test if pdflatex exists and works
+if [ ! -x "$TEXLIVE_BIN_DIR/pdflatex" ]; then
+    echo "ERROR: pdflatex not found or not executable"
+    ls -la "$TEXLIVE_BIN_DIR/" | head -10
+    exit 1
+fi
+
+# Set up PATH for package installation
+export PATH="$TEXLIVE_BIN_DIR:$PATH"
+
+echo "-----> Testing pdflatex installation"
+"$TEXLIVE_BIN_DIR/pdflatex" --version | head -1 || {
+    echo "ERROR: pdflatex test failed"
+    exit 1
+}
+
+# Verify tlmgr exists and is working
+if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
+    echo "-----> Testing tlmgr"
+    "$TEXLIVE_BIN_DIR/tlmgr" --version 2>/dev/null | head -1 || echo "       tlmgr version check failed"
+fi
+
+# Install additional packages needed for CV if tlmgr is available
+if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
+    echo "-----> Configuring tlmgr and installing additional packages for CV"
+    
+    # Initialize tlmgr with proper repository
+    echo "       Initializing tlmgr repository"
+    "$TEXLIVE_BIN_DIR/tlmgr" option repository ctan || {
+        echo "       Setting repository to main CTAN mirror"
+        "$TEXLIVE_BIN_DIR/tlmgr" option repository https://mirror.ctan.org/systems/texlive/tlnet
+    }
+    
+    # Update tlmgr database
+    echo "       Updating package database"
+    "$TEXLIVE_BIN_DIR/tlmgr" update --self 2>/dev/null || echo "       Note: Could not update tlmgr (this is often normal)"
+    
+    # Install essential packages for CV
+    PACKAGES="geometry fontawesome5 tcolorbox enumitem xcolor hyperref pgf etoolbox l3backend l3kernel l3packages amsfonts"
+    
+    for package in $PACKAGES; do
+        echo "       Installing $package"
+        if ! "$TEXLIVE_BIN_DIR/tlmgr" install "$package" 2>/dev/null; then
+            echo "       Warning: Could not install $package - trying with --verify-repo=none"
+            "$TEXLIVE_BIN_DIR/tlmgr" install --verify-repo=none "$package" 2>/dev/null || echo "       Error: Failed to install $package"
+        else
+            echo "       Successfully installed $package"
+        fi
+    done
+else
+    echo "-----> tlmgr not available, using base TinyTeX packages"
+    echo "       Note: Some LaTeX features may not be available"
+fi
+
+# Create environment setup script
+mkdir -p "$BUILD_DIR/.profile.d"
+cat > "$BUILD_DIR/.profile.d/texlive.sh" << EOF
+# Set up TeX Live environment
+export PATH="$TEXLIVE_BIN_DIR:\$PATH"
+export TEXMFCACHE="/tmp/texmf-cache"
+export TEXMFVAR="/tmp/texmf-var"
+mkdir -p "\$TEXMFCACHE" "\$TEXMFVAR"
+
+# Ensure TeX Live can find its files
+export TEXMFHOME="\$HOME/.texlive/texmf"
+mkdir -p "\$TEXMFHOME"
+EOF
+
+echo "-----> LaTeX installation complete"
+echo "       TeX Live location: $TEXLIVE_DIR"
+echo "       Binary location: $TEXLIVE_BIN_DIR"
+echo "       pdflatex version:"
+"$TEXLIVE_BIN_DIR/pdflatex" --version 2>/dev/null | head -1 || echo "       Could not get version"
+
+# Create a test script for debugging
+cat > "$BUILD_DIR/test-latex.sh" << EOF
+#!/bin/bash
+echo "Testing LaTeX installation:"
+echo "PATH: \$PATH"
+echo "pdflatex location: \$(which pdflatex)"
+echo "pdflatex version: \$(pdflatex --version 2>&1 | head -1)"
+echo "tlmgr location: \$(which tlmgr)"
+echo "Available packages test:"
+if command -v tlmgr >/dev/null 2>&1; then
+    echo "tlmgr is available"
+    tlmgr info geometry 2>/dev/null | head -3 || echo "geometry package not found"
+else
+    echo "tlmgr not available"
+fi
+echo "TeX Live directories:"
+ls "\$HOME/.texlive" 2>/dev/null || echo "No .texlive directory"
+EOF
+chmod +x "$BUILD_DIR/test-latex.sh"
+
+# Create a helper script for on-demand package installation
+cat > "$BUILD_DIR/install-tex-package.sh" << EOF
+#!/bin/bash
+# Helper script to install LaTeX packages on-demand
+PACKAGE=\$1
+if [ -z "\$PACKAGE" ]; then
+    echo "Usage: \$0 <package-name>"
+    exit 1
+fi
+
+echo "Installing LaTeX package: \$PACKAGE"
+if command -v tlmgr >/dev/null 2>&1; then
+    tlmgr install "\$PACKAGE" || tlmgr install --verify-repo=none "\$PACKAGE"
+else
+    echo "tlmgr not available - cannot install \$PACKAGE"
+    exit 1
+fi
+EOF
+chmod +x "$BUILD_DIR/install-tex-package.sh"
+
+echo "-----> Created test script at /app/test-latex.sh"
