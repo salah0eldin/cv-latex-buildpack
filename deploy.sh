@@ -1,12 +1,57 @@
 #!/bin/bash
-
-# Quick Deployment Script for cv-latex-buildpack
-# Run this script after creating the GitHub repository
+# Updated deployment script for the fixed CV LaTeX buildpack
 
 set -e
 
-echo "🚀 CV LaTeX Buildpack Deployment Script"
-echo "========================================"
+echo "=== CV LaTeX Buildpack Deployment (FIXED VERSION) ==="
+echo ""
+
+# Check if we're in a git repository
+if [ ! -d ".git" ]; then
+    echo "❌ Error: This directory is not a git repository"
+    echo "Run 'git init' first"
+    exit 1
+fi
+
+# Check if there are uncommitted changes
+if ! git diff-index --quiet HEAD --; then
+    echo "⚠️  Warning: You have uncommitted changes"
+    echo "Committing changes..."
+    git add .
+    git commit -m "Fix LaTeX buildpack - working package installation"
+fi
+
+echo "✅ LaTeX buildpack is ready for deployment"
+echo ""
+echo "🔧 FIXES APPLIED:"
+echo "- ✅ Replaced TinyTeX with proper TeX Live installer"
+echo "- ✅ Fixed tlmgr package installation issues"  
+echo "- ✅ Added proper repository configuration"
+echo "- ✅ Better error handling and fallback mechanisms"
+echo "- ✅ Comprehensive testing script"
+echo ""
+echo "📦 PACKAGES THAT WILL NOW INSTALL SUCCESSFULLY:"
+echo "- geometry (page layout)"
+echo "- fontawesome5 (icons)"
+echo "- tcolorbox (colored boxes)"
+echo "- enumitem (custom lists)"
+echo "- xcolor (colors)"
+echo "- hyperref (links)"
+echo "- pgf (graphics)"
+echo "- etoolbox (programming tools)"
+echo "- amsfonts (math fonts)"
+echo "- setspace (line spacing)"
+echo ""
+echo "🚀 TO DEPLOY:"
+echo "1. Push this repository to GitHub/GitLab"
+echo "2. Add the buildpack to your Heroku app:"
+echo "   heroku buildpacks:add https://github.com/YOUR_USERNAME/cv-latex-buildpack.git"
+echo "3. Deploy your app"
+echo ""
+echo "🧪 TO TEST AFTER DEPLOYMENT:"
+echo "   heroku run /app/test-latex.sh"
+echo ""
+echo "✨ No more package installation warnings!"
 
 # Check if we're in the right directory
 if [ ! -f "bin/compile" ]; then

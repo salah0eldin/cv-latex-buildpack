@@ -5,22 +5,21 @@ This is a minimal LaTeX buildpack specifically designed for generating CVs with 
 ## Features
 - Installs only essential LaTeX packages (small footprint)
 - Optimized for CV generation use case
-- Based on TeX Live minimal scheme
-- Includes only necessary fonts and packages
+- Based on TeX Live minimal scheme with proper package management
+- Includes necessary fonts and packages for CV compilation
 
 ## Packages Included
+The buildpack automatically installs these essential packages for CV generation:
 - geometry (page layout)
 - fontawesome5 (icons)
 - tcolorbox (colored boxes)
 - enumitem (custom lists)
-- psnfss (PostScript fonts)
 - amsfonts (math fonts)
 - hyperref (links)
 - setspace (line spacing)
 - xcolor (colors)
 - pgf (graphics)
 - etoolbox (programming tools)
-- l3backend/l3kernel/l3packages (LaTeX3 support)
 
 ## Usage
 1. Push this buildpack to a Git repository
@@ -31,10 +30,24 @@ This is a minimal LaTeX buildpack specifically designed for generating CVs with 
    ```
 3. Deploy your app
 
+## What's Fixed
+This version addresses common package installation issues by:
+- Using the official TeX Live installer instead of TinyTeX
+- Proper repository configuration for package management
+- Better error handling and verbose output
+- Fallback mechanisms for package installation
+- Comprehensive testing and verification
+
 ## File Structure
 - `bin/detect` - Detects if LaTeX is needed
-- `bin/compile` - Installs minimal LaTeX
+- `bin/compile` - Installs minimal TeX Live with CV packages
 - `bin/release` - Sets up environment variables
 
+## Testing
+After deployment, you can test the installation by running:
+```bash
+heroku run /app/test-latex.sh
+```
+
 ## Size
-This buildpack installs approximately 50-100MB of LaTeX packages vs 400MB+ for full TeX Live.
+This buildpack installs approximately 100-200MB of LaTeX packages vs 4GB+ for full TeX Live.
