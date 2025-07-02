@@ -24,6 +24,7 @@ fi
 echo "✅ LaTeX buildpack is ready for deployment"
 echo ""
 echo "🔧 FIXES APPLIED:"
+echo "- ✅ Recreated missing detect and release files (CRITICAL)"
 echo "- ✅ Replaced TinyTeX with proper TeX Live installer"
 echo "- ✅ Fixed tlmgr package installation issues"  
 echo "- ✅ Added proper repository configuration"

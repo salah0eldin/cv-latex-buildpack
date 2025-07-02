@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# bin/release <build-dir>
+
+BUILD_DIR=$1
+
+cat << EOF
+---
+config_vars:
+  PATH: /app/.texlive/bin/x86_64-linux:\$PATH
+default_process_types:
+  web: gunicorn app:app
+EOF

@@ -30,6 +30,19 @@ The buildpack automatically installs these essential packages for CV generation:
    ```
 3. Deploy your app
 
+## Buildpack Detection
+This buildpack will be automatically detected if your project contains:
+- Any `.tex` files
+- A `.latex-buildpack` marker file
+- Python files that reference LaTeX/PDF generation
+
+You can also force detection by creating a `.latex-buildpack` file in your project root.
+
+## Essential Files
+- `bin/detect` - Determines when this buildpack should be used
+- `bin/compile` - Installs TeX Live and required packages  
+- `bin/release` - Sets up environment variables and PATH
+
 ## What's Fixed
 This version addresses common package installation issues by:
 - Using the official TeX Live installer instead of TinyTeX

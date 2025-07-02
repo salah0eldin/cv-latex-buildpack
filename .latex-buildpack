@@ -1,0 +1,15 @@
+# LaTeX Buildpack Marker
+# This file indicates that this project needs LaTeX for PDF generation
+# The buildpack will detect this file and install LaTeX accordingly
+
+# Required packages are automatically installed by the buildpack:
+# - geometry (page layout)
+# - fontawesome5 (icons) 
+# - tcolorbox (colored boxes)
+# - enumitem (custom lists)
+# - xcolor (colors)
+# - hyperref (links)
+# - pgf (graphics)
+# - etoolbox (programming tools)
+# - amsfonts (math fonts)
+# - setspace (line spacing)
