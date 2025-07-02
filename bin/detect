@@ -1,0 +1,10 @@
+#!/bin/bash
+# Buildpack detect script
+
+# Check if we need LaTeX (look for .tex files or specific requirements)
+if [ -f "$1/cv.tex" ] || [ -f "$1/requirements-latex.txt" ] || [ -f "$1/needs-latex" ]; then
+  echo "cv-latex"
+  exit 0
+fi
+
+exit 1
