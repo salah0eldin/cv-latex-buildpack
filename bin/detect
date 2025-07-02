@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
 # bin/detect <build-dir>
 
-# This buildpack should be used for LaTeX/CV generation
-# We'll detect it by checking for common indicators
-
 BUILD_DIR=$1
 
-# Check for LaTeX files or specific indicators
-if [ -f "$BUILD_DIR/requirements.txt" ] && grep -q "latex\|pdf" "$BUILD_DIR"/*.py 2>/dev/null; then
+# Check for specific markers that indicate LaTeX CV generation is needed
+if [ -f "$BUILD_DIR/latex-packages.txt" ]; then
     echo "LaTeX CV Generator"
     exit 0
 fi
 
-# Check for any .tex files
-if find "$BUILD_DIR" -name "*.tex" -type f | head -1 | grep -q .; then
-    echo "LaTeX"
+if [ -f "$BUILD_DIR/.latex-buildpack" ]; then
+    echo "LaTeX CV Generator"
     exit 0
 fi
 
-# Check for specific markers that indicate LaTeX is needed
-if [ -f "$BUILD_DIR/.latex-buildpack" ] || [ -f "$BUILD_DIR/latex-packages.txt" ]; then
-    echo "LaTeX"
+# Check for Python files that likely use LaTeX for PDF generation
+if [ -f "$BUILD_DIR/requirements.txt" ]; then
+    if find "$BUILD_DIR" -name "*.py" -exec grep -l "latex\|pdflatex\|tex\|cv.*pdf" {} \; 2>/dev/null | head -1 | grep -q .; then
+        echo "LaTeX CV Generator"
+        exit 0
+    fi
+fi
+
+# Check for any .tex files
+if find "$BUILD_DIR" -name "*.tex" -type f 2>/dev/null | head -1 | grep -q .; then
+    echo "LaTeX CV Generator"
     exit 0
 fi
 

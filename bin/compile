@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Working LaTeX buildpack based on successful Heroku buildpacks
+# Version: 2025.07.02-v2 (Updated with better error handling and TinyTeX v2025.07)
 
 BUILD_DIR=$1
 CACHE_DIR=$2
 BIN_DIR=$(cd $(dirname $0); pwd)
 
 # Use TinyTeX from GitHub releases (more reliable than install-tl)
-TINYTEX_VERSION="v2023.05"
+TINYTEX_VERSION="v2025.07"
 TINYTEX_URL="https://github.com/rstudio/tinytex-releases/releases/download/${TINYTEX_VERSION}/TinyTeX-1-${TINYTEX_VERSION#v}.tar.gz"
 TEXLIVE_HOME="$BUILD_DIR/.texlive"
 TEXLIVE_CACHE="$CACHE_DIR/.texlive"
@@ -25,10 +26,35 @@ if [ -f "$TEXLIVE_CACHE/VERSION" ] && [ "$(cat $TEXLIVE_CACHE/VERSION)" = "$TINY
     cp -R "$TEXLIVE_CACHE"/* "$TEXLIVE_HOME/"
 else
     echo "-----> Downloading TinyTeX $TINYTEX_VERSION"
-    curl -L "$TINYTEX_URL" -s -o - | tar xzf - -C "$TEXLIVE_HOME" --strip-components=1 || {
-        echo "ERROR: Failed to download and extract TinyTeX"
+    echo "       URL: $TINYTEX_URL"
+    
+    # Download with better error handling and progress
+    if curl -L "$TINYTEX_URL" -f --progress-bar -o /tmp/tinytex.tar.gz; then
+        echo "       Download successful ($(ls -lh /tmp/tinytex.tar.gz | awk '{print $5}'))"
+        
+        # Verify it's a valid gzip file before extraction
+        if file /tmp/tinytex.tar.gz | grep -q "gzip compressed"; then
+            echo "       File verified as gzip, extracting..."
+            if tar xzf /tmp/tinytex.tar.gz -C "$TEXLIVE_HOME" --strip-components=1; then
+                echo "       Extraction successful"
+            else
+                echo "ERROR: Failed to extract TinyTeX"
+                echo "       Archive contents:"
+                tar tzf /tmp/tinytex.tar.gz | head -10
+                exit 1
+            fi
+        else
+            echo "ERROR: Downloaded file is not a valid gzip archive"
+            echo "       File type: $(file /tmp/tinytex.tar.gz)"
+            echo "       First few bytes: $(head -c 50 /tmp/tinytex.tar.gz | hexdump -C)"
+            exit 1
+        fi
+        rm -f /tmp/tinytex.tar.gz
+    else
+        echo "ERROR: Failed to download TinyTeX from $TINYTEX_URL"
+        echo "       curl exit code: $?"
         exit 1
-    }
+    fi
 
     # Cache the installation
     rm -rf "$TEXLIVE_CACHE"/*
@@ -71,8 +97,8 @@ if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
     # Initialize tlmgr repository
     "$TEXLIVE_BIN_DIR/tlmgr" option repository ctan >/dev/null 2>&1 || true
     
-    # Essential packages for CV generation
-    PACKAGES="geometry fontawesome5 tcolorbox enumitem xcolor hyperref pgf etoolbox amsfonts setspace"
+    # Essential packages for CV generation (based on user requirements)
+    PACKAGES="geometry fontawesome5 tcolorbox enumitem xcolor hyperref pgf etoolbox amsfonts setspace mathpazo helvetic courier amssymb"
     
     for package in $PACKAGES; do
         echo "       Installing $package..."
@@ -82,6 +108,15 @@ if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
             echo "       ✗ $package failed (will try on-demand)"
         fi
     done
+
+    # Read additional packages from latex-packages.txt if it exists
+    EXTRA_PACKAGES=""
+    if [ -f "$BUILD_DIR/latex-packages.txt" ]; then
+        echo "       Found latex-packages.txt, reading additional packages..."
+        EXTRA_PACKAGES=$(grep -v '^#' "$BUILD_DIR/latex-packages.txt" | grep -v '^$' | tr '\n' ' ')
+        echo "       Additional packages: $EXTRA_PACKAGES"
+        PACKAGES="$PACKAGES $EXTRA_PACKAGES"
+    fi
 else
     echo "-----> tlmgr not available, using base packages only"
 fi
