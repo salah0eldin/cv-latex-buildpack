@@ -45,6 +45,46 @@ else
     CACHE_HIT=false
 fi
 
+# Advanced cache persistence strategy
+CACHE_SENTINEL="$CACHE_DIR/.buildpack-cache-sentinel"
+CACHE_LOCK="$CACHE_DIR/.cache-lock"
+CACHE_TIMEOUT=3600  # 1 hour timeout
+
+# Function to check cache lock
+check_cache_lock() {
+    if [ -f "$CACHE_LOCK" ]; then
+        LOCK_TIME=$(cat "$CACHE_LOCK" 2>/dev/null || echo "0")
+        CURRENT_TIME=$(date +%s)
+        if [ $((CURRENT_TIME - LOCK_TIME)) -lt $CACHE_TIMEOUT ]; then
+            echo "-----> Cache lock detected, using cached version"
+            return 0
+        else
+            echo "-----> Cache lock expired, removing"
+            rm -f "$CACHE_LOCK"
+        fi
+    fi
+    return 1
+}
+
+# Create cache lock
+create_cache_lock() {
+    date +%s > "$CACHE_LOCK"
+}
+
+# Check for cache persistence override
+if [ "$TEXLIVE_CACHE" = "true" ] || [ "$BUILDPACK_CACHE" = "true" ]; then
+    echo "-----> Cache persistence enabled"
+    
+    # Check if we can use existing cache
+    if check_cache_lock; then
+        if [ -d "$TEXLIVE_CACHE" ] && [ -f "$TEXLIVE_CACHE/VERSION" ]; then
+            echo "-----> Using persistent cache (override)"
+            cp -R "$TEXLIVE_CACHE"/* "$TEXLIVE_HOME/"
+            CACHE_HIT=true
+        fi
+    fi
+fi
+
 if [ "$CACHE_HIT" != "true" ]; then
     echo "-----> Downloading TinyTeX $TINYTEX_VERSION"
     echo "       URL: $TINYTEX_URL"
@@ -77,11 +117,19 @@ if [ "$CACHE_HIT" != "true" ]; then
         exit 1
     fi
 
-    # Cache the installation
+    # Cache the installation with enhanced persistence
+    echo "-----> Caching TinyTeX installation for future builds"
     rm -rf "$TEXLIVE_CACHE"/*
     cp -R "$TEXLIVE_HOME"/* "$TEXLIVE_CACHE/"
     echo "$TINYTEX_VERSION" > "$TEXLIVE_CACHE/VERSION"
     echo "$CURRENT_SIGNATURE" > "$CACHE_SIGNATURE"
+    
+    # Create cache sentinel for persistence
+    echo "$(date +%s)" > "$CACHE_SENTINEL"
+    create_cache_lock
+    
+    # Force cache permissions
+    chmod -R 755 "$TEXLIVE_CACHE" 2>/dev/null || true
 fi
 
 # Find TeX Live binaries

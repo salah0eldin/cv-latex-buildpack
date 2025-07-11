@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Cache restoration hook for LaTeX buildpack
+# This ensures cache persistence across builds
+
+CACHE_DIR=${CACHE_DIR:-/tmp/cache}
+TEXLIVE_CACHE="$CACHE_DIR/.texlive"
+
+# If cache exists, protect it
+if [ -d "$TEXLIVE_CACHE" ]; then
+    echo "-----> Protecting LaTeX cache"
+    
+    # Create backup in case of cache corruption
+    if [ ! -d "$CACHE_DIR/.texlive-backup" ]; then
+        cp -R "$TEXLIVE_CACHE" "$CACHE_DIR/.texlive-backup"
+    fi
+    
+    # Set cache protection flags
+    touch "$TEXLIVE_CACHE/.protected"
+    echo "$(date +%s)" > "$TEXLIVE_CACHE/.last-access"
+fi
