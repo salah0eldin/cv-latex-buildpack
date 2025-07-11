@@ -20,11 +20,32 @@ mkdir -p "$TEXLIVE_HOME"
 mkdir -p "$TEXLIVE_CACHE"
 mkdir -p "$(dirname $PROFILE_D)"
 
-# Check if we have a cached version
-if [ -f "$TEXLIVE_CACHE/VERSION" ] && [ "$(cat $TEXLIVE_CACHE/VERSION)" = "$TINYTEX_VERSION" ]; then
-    echo "-----> Installing TinyTeX $TINYTEX_VERSION from cache"
-    cp -R "$TEXLIVE_CACHE"/* "$TEXLIVE_HOME/"
+# Enhanced caching with multiple validation checks
+CACHE_SIGNATURE="$CACHE_DIR/.heroku-cache-signature"
+PACKAGES_HASH=$(echo "$BUILD_DIR/latex-packages.txt" | md5sum | cut -d' ' -f1 2>/dev/null || echo "default")
+
+# Create cache signature
+CURRENT_SIGNATURE="${TINYTEX_VERSION}-${PACKAGES_HASH}-${STACK}"
+
+# Check if we have a valid cached version
+if [ -f "$TEXLIVE_CACHE/VERSION" ] && [ -f "$CACHE_SIGNATURE" ]; then
+    CACHED_VERSION=$(cat "$TEXLIVE_CACHE/VERSION" 2>/dev/null || echo "")
+    CACHED_SIGNATURE=$(cat "$CACHE_SIGNATURE" 2>/dev/null || echo "")
+    
+    if [ "$CACHED_VERSION" = "$TINYTEX_VERSION" ] && [ "$CACHED_SIGNATURE" = "$CURRENT_SIGNATURE" ]; then
+        echo "-----> Installing TinyTeX $TINYTEX_VERSION from cache (validated)"
+        cp -R "$TEXLIVE_CACHE"/* "$TEXLIVE_HOME/"
+        CACHE_HIT=true
+    else
+        echo "-----> Cache invalidated (version: $CACHED_VERSION vs $TINYTEX_VERSION, signature: cached vs new)"
+        CACHE_HIT=false
+    fi
 else
+    echo "-----> No valid cache found"
+    CACHE_HIT=false
+fi
+
+if [ "$CACHE_HIT" != "true" ]; then
     echo "-----> Downloading TinyTeX $TINYTEX_VERSION"
     echo "       URL: $TINYTEX_URL"
     
@@ -60,6 +81,7 @@ else
     rm -rf "$TEXLIVE_CACHE"/*
     cp -R "$TEXLIVE_HOME"/* "$TEXLIVE_CACHE/"
     echo "$TINYTEX_VERSION" > "$TEXLIVE_CACHE/VERSION"
+    echo "$CURRENT_SIGNATURE" > "$CACHE_SIGNATURE"
 fi
 
 # Find TeX Live binaries
