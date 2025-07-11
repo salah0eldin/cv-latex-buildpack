@@ -27,21 +27,22 @@ PACKAGES_HASH=$(echo "$BUILD_DIR/latex-packages.txt" | md5sum | cut -d' ' -f1 2>
 # Create cache signature
 CURRENT_SIGNATURE="${TINYTEX_VERSION}-${PACKAGES_HASH}-${STACK}"
 
-# Check if we have a valid cached version
-if [ -f "$TEXLIVE_CACHE/VERSION" ] && [ -f "$CACHE_SIGNATURE" ]; then
+# Check if we have a valid cached version with complete packages
+if [ -f "$TEXLIVE_CACHE/VERSION" ] && [ -f "$CACHE_SIGNATURE" ] && [ -f "$TEXLIVE_CACHE/PACKAGES_INSTALLED" ]; then
     CACHED_VERSION=$(cat "$TEXLIVE_CACHE/VERSION" 2>/dev/null || echo "")
     CACHED_SIGNATURE=$(cat "$CACHE_SIGNATURE" 2>/dev/null || echo "")
+    PACKAGES_STATUS=$(cat "$TEXLIVE_CACHE/PACKAGES_INSTALLED" 2>/dev/null || echo "")
     
-    if [ "$CACHED_VERSION" = "$TINYTEX_VERSION" ] && [ "$CACHED_SIGNATURE" = "$CURRENT_SIGNATURE" ]; then
-        echo "-----> Installing TinyTeX $TINYTEX_VERSION from cache (validated)"
+    if [ "$CACHED_VERSION" = "$TINYTEX_VERSION" ] && [ "$CACHED_SIGNATURE" = "$CURRENT_SIGNATURE" ] && [ "$PACKAGES_STATUS" = "COMPLETE" ]; then
+        echo "-----> Installing TinyTeX $TINYTEX_VERSION from cache (validated with packages)"
         cp -R "$TEXLIVE_CACHE"/* "$TEXLIVE_HOME/"
         CACHE_HIT=true
     else
-        echo "-----> Cache invalidated (version: $CACHED_VERSION vs $TINYTEX_VERSION, signature: cached vs new)"
+        echo "-----> Cache invalidated (version: $CACHED_VERSION vs $TINYTEX_VERSION, signature mismatch, or incomplete packages)"
         CACHE_HIT=false
     fi
 else
-    echo "-----> No valid cache found"
+    echo "-----> No valid cache found (missing version, signature, or packages marker)"
     CACHE_HIT=false
 fi
 
@@ -160,6 +161,27 @@ fi
 
 echo "-----> pdflatex is working"
 
+# Check if we hit cache and should skip package installation
+if [ "$CACHE_HIT" = "true" ]; then
+    echo "-----> Using cached LaTeX packages, skipping installation"
+    echo "-----> LaTeX installation complete (from cache)"
+    echo "       Binary location: $TEXLIVE_BIN_DIR"
+    
+    # Create profile script for PATH
+    echo "export PATH=\"$TEXLIVE_BIN_DIR:\$PATH\"" > "$PROFILE_D"
+    
+    echo "-----> Test script created at /app/test-latex.sh"
+    cat > "$BUILD_DIR/test-latex.sh" << 'EOF'
+#!/bin/bash
+echo "Testing LaTeX installation..."
+pdflatex --version
+echo "LaTeX test completed successfully!"
+EOF
+    chmod +x "$BUILD_DIR/test-latex.sh"
+    
+    exit 0
+fi
+
 # Install essential packages for CV if tlmgr is available
 if [ -x "$TEXLIVE_BIN_DIR/tlmgr" ]; then
     echo "-----> Installing essential CV packages"
@@ -207,6 +229,10 @@ EOF
 
 echo "-----> LaTeX installation complete"
 echo "       Binary location: $TEXLIVE_BIN_DIR"
+
+# Mark cache as complete with packages installed
+echo "COMPLETE" > "$TEXLIVE_CACHE/PACKAGES_INSTALLED"
+echo "$(date +%s)" > "$TEXLIVE_CACHE/INSTALL_TIMESTAMP"
 
 # Create test script
 cat > "$BUILD_DIR/test-latex.sh" << 'EOF'
